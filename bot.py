@@ -1,17 +1,12 @@
 import os
 import asyncio
-import logging
 from google import genai
 from google.genai import types
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Простий logging без зайвих полів
-logging.basicConfig(level=logging.ERROR)
-logger = logging.getLogger(__name__)
-
-TELEGRAM_TOKEN = "8988348987:AAEspovqtryP3trqBrMPEozE40ksHa93JDc"
-GEMINI_API_KEY = "AQ.Ab8RN6KlAuJmyZVsZOUvSu1XAeFO6PYYDzLwxeIgHcHyjX-hjg"
+TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -22,7 +17,6 @@ SYSTEM_PROMPT = """Ти — розумний репетитор з фізики.
 - Відповідай мовою запитання
 - Якщо питання не про фізику — ввічливо відмов"""
 
-# user_id -> список повідомлень
 user_histories: dict[int, list] = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -46,13 +40,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "— Поясни закон Ома простими словами\n"
         "— Що таке термодинаміка?\n"
         "— Як розрахувати силу Архімеда?\n\n"
-        "Я пам'ятаю контекст розмови — можна уточнювати!\n"
         "/clear — почати нову тему"
     )
 
 async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_histories[update.effective_user.id] = []
-    await update.message.reply_text("🗑️ Історію очищено! Починаємо нову тему.")
+    await update.message.reply_text("🗑️ Історію очищено!")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -60,8 +53,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if user_id not in user_histories:
         user_histories[user_id] = []
-
-    # Зберігаємо останні 20 повідомлень
     if len(user_histories[user_id]) > 20:
         user_histories[user_id] = user_histories[user_id][-20:]
 
@@ -81,20 +72,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 max_output_tokens=1500,
             )
         )
-
         reply = response.text
-
         user_histories[user_id].append(
             types.Content(role="model", parts=[types.Part(text=reply)])
         )
-
         await thinking_msg.delete()
-
         for i in range(0, len(reply), 4000):
             await update.message.reply_text(reply[i:i+4000])
-
     except Exception as e:
-        print(f"Gemini error: {e}")
+        print(f"Error: {e}")
         await thinking_msg.edit_text("❌ Помилка. Спробуй ще раз або /clear")
 
 async def main():
@@ -103,8 +89,7 @@ async def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("clear", clear_history))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    print("Бот запущено! Натисни Ctrl+C для зупинки.")
+    print("Бот запущено!")
     await app.initialize()
     await app.start()
     await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
